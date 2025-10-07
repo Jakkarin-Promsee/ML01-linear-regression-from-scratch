@@ -13,7 +13,7 @@ class DenseLayer:
         self.output_dim = output_dim
 
     def params_count(self):
-        return self.input_dim * self.output_dim + 1
+        return self.input_dim * self.output_dim + self.output_dim
 
 class ActivationLayer:
     def __init__(self, method):
@@ -58,13 +58,13 @@ class Lr_Models:
         layer = DenseLayer(input_dim, output_dim)
         self.layers.append(layer)
 
-    def add_layer(self, method):
+    def add_activate_func(self, method):
         layer = ActivationLayer(method)
         self.layers.append(layer)
 
     def total_params(self):
-        return sum(layer.params_count() for layer in self.layer 
-                      if isinstance(layer, DenseLayer))
+        return sum(layer.params_count() for layer in self.layers if isinstance(layer, DenseLayer)) 
+
     
     def predict(self, X):
         # Intial first a to forward
@@ -89,7 +89,7 @@ class Lr_Models:
         # Return last layer output
         return a   
 
-    def fit(self, X, y_true, epochs=1000, batch_size=32, learning_rate=0.01):   
+    def fit(self, X, y_true, epochs=1000, batch_size=32, learning_rate=0.01):
         n_samples = X.shape[0]
 
         for epoch in range(epochs):
@@ -101,9 +101,9 @@ class Lr_Models:
                 X_batch = X[batch_start:batch_end]
 
                 # Forward pass
-                a = X_batch
-                al = [X_batch]  # to store a values for backpropagation
-                zl = [X_batch]  # to store z values for backpropagation
+                a = np.array(X_batch)
+                zal = [a] # to keep both z or a
+
 
                 for layer in self.layers:
                     # If now we're on dense layer
@@ -115,13 +115,14 @@ class Lr_Models:
                         # z = X * W + b
                         # z = a ; no activate funciton
                         a = np.dot(a, layer.W) + layer.b
-                        zl.append(a)
 
                     # If now we're on activation layer
                     if(isinstance(layer, ActivationLayer)):
                         # a = f(z) which now z = a
                         a = layer.forward(a)
-                        al.append(a)
+
+                    # keep forward data
+                    zal.append(a)
 
                 # Get zi
                 y_pred_batch = a
@@ -129,19 +130,31 @@ class Lr_Models:
                 # dL/dz (MSE) = (2/N)*(zi-yi)
                 dL_dz = (2/batch_size) * (y_pred_batch - y_true_batch)
 
+                # Set iterator
+                i = len(zal)-1 
+
                 # Compute gradients and Update weights
-                for i, layer in reversed(list(enumerate(self.layers))):  
+                for layer in reversed(list(self.layers)): 
+                    # cause i=max() have done calculate at first dL/dz
+                    i-=1
+
                     if(isinstance(layer, DenseLayer)):                
+                        # z(l) = a(l-1) * W(l) + b(l)
+                        # a(l-1) -> z(l) -> a(l) -> L
                         # compute gradients w.r.t weights and biases
                         # dL/dW = dz/dw * dL/dz
                         # dL/dW = a^T * dL_dz
                         #
-                        # dL/db = dz/dw * dL/dz
+                        # dL/db = dz/db * dL/dz
                         # dL/db = [1]^T * dL/dz
                         # dL/db = sum(dL/dz)
+                        #
+                        # dL/dw(l-1) = dz/dw(l-1) * dL/dz(l-1)
+                        # dL/dw(l-1) = a(l-2)^T * dL/dz(l-1)
 
-                        dL_dW = np.dot(al[i].T, dL_dz)
+                        dL_dW = np.dot(zal[i].T, dL_dz)
                         dL_db = np.sum(dL_dz, axis=0, keepdims=True)
+                        
 
                         # Update weights and biases
                         layer.W -= learning_rate * dL_dW
@@ -157,7 +170,7 @@ class Lr_Models:
                         # dL/da(l-1) =  dL/dz(l) * W^T
                         #
                         # dL/dz(l-1) = da(l-1)/dz(l-1) * dL/da(l-1)
-                        # dL/da(l-q) = f'(z(l-1)) dot (dL/dz(l) * W^T)
-                        dL_dz = self.relu_derivative(zl[i]) * dL_dz
+                        # dL/dz(l-1) = f'(z(l-1)) dot dL/da(l-1)
+                        dL_dz = layer.backward(zal[i]) * dL_dz
 
-        print(f"Epoch {epoch+1}/{epochs} mae: {ut.mae(y_true, self.predict(X))} completed.")
+            print(f"Epoch {epoch+1}/{epochs} mae: {ut.mae(y_true, self.predict(X))} completed.")

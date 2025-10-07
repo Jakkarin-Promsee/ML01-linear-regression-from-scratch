@@ -58,7 +58,7 @@ class Lr_Models:
         layer = DenseLayer(input_dim, output_dim)
         self.layers.append(layer)
 
-    def add_layer(self, method):
+    def add_ativation(self, method):
         layer = ActivationLayer(method)
         self.layers.append(layer)
 
@@ -140,7 +140,7 @@ class Lr_Models:
                         # dL/db = [1]^T * dL/dz
                         # dL/db = sum(dL/dz)
 
-                        dL_dW = np.dot(al[i].T, dL_dz)
+                        dL_dW = np.dot(al[i-1].T, dL_dz)
                         dL_db = np.sum(dL_dz, axis=0, keepdims=True)
 
                         # Update weights and biases
@@ -158,6 +158,6 @@ class Lr_Models:
                         #
                         # dL/dz(l-1) = da(l-1)/dz(l-1) * dL/da(l-1)
                         # dL/da(l-q) = f'(z(l-1)) dot (dL/dz(l) * W^T)
-                        dL_dz = self.relu_derivative(zl[i]) * dL_dz
+                        dL_dz = self.relu_derivative(zl[i-1]) * dL_dz
 
         print(f"Epoch {epoch+1}/{epochs} mae: {ut.mae(y_true, self.predict(X))} completed.")
